@@ -27,6 +27,42 @@ pipeline {
             }
         }
 
+        stage('Validate Changelog') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'local-oracle-db-creds',
+                    usernameVariable: 'DB_USERNAME',
+                    passwordVariable: 'DB_PASSWORD'
+                )]) {
+                    sh 'make validate'
+                }
+            }
+        }
+
+        stage('Validate Parameters') {
+            when { expression { params.ACTION == 'rollback' } }
+            steps {
+                script {
+                    if (!params.ROLLBACK_TO_TAG?.trim()) {
+                        error("ROLLBACK_TO_TAG must be set when ACTION=rollback. Example: build-42")
+                    }
+                }
+            }
+        }
+
+        stage('Pending Changes') {
+            when { expression { params.ACTION == 'migrate' } }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'local-oracle-db-creds',
+                    usernameVariable: 'DB_USERNAME',
+                    passwordVariable: 'DB_PASSWORD'
+                )]) {
+                    sh 'make status'
+                }
+            }
+        }
+
         stage('Dry Run') {
             when { expression { params.ACTION == 'dry-run' } }
             steps {
@@ -75,7 +111,9 @@ pipeline {
                     usernameVariable: 'DB_USERNAME',
                     passwordVariable: 'DB_PASSWORD'
                 )]) {
-                    input message: "Review the rollback SQL above. Proceed with rollback to tag '${params.ROLLBACK_TO_TAG}'?"
+                    timeout(time: 30, unit: 'MINUTES') {
+                        input message: "Review the rollback SQL above. Proceed with rollback to tag '${params.ROLLBACK_TO_TAG}'?"
+                    }
                     sh "RELEASE_TAG=${params.ROLLBACK_TO_TAG} make rollback"
                 }
             }
@@ -84,6 +122,7 @@ pipeline {
 
     post {
         always {
+            archiveArtifacts artifacts: 'liquibase-dry-run.sql', allowEmptyArchive: true
             cleanWs()
         }
     }

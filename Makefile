@@ -11,13 +11,22 @@ LIQUIBASE_RUN = docker run --rm \
 	  --username="$$DB_USERNAME" \
 	  --password="$$DB_PASSWORD"
 
-.PHONY: dry-run migrate tag rollback rollback-dry-run
+.PHONY: validate status dry-run migrate tag rollback rollback-dry-run
 
-## dry-run: prints the SQL Liquibase would execute without applying it (updateSQL)
+## validate: checks the changelog for errors without touching the DB
+validate:
+	$(LIQUIBASE_RUN) validate
+
+## status: lists changesets not yet applied to the DB
+status:
+	$(LIQUIBASE_RUN) status --verbose
+
+## dry-run: prints the SQL Liquibase would execute and saves it to liquibase-dry-run.sql
 dry-run:
-	$(LIQUIBASE_RUN) updateSQL
+	$(LIQUIBASE_RUN) updateSQL > $(WORKSPACE)/liquibase-dry-run.sql 2>&1 || \
+	  (cat $(WORKSPACE)/liquibase-dry-run.sql; exit 1)
 
-## migrate: applies pending changesets then tags the state with BUILD_NUMBER
+## migrate: applies pending changesets to the database
 migrate:
 	$(LIQUIBASE_RUN) update
 
