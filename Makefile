@@ -12,6 +12,7 @@ login:
 dry-run:
 	docker run --rm \
 	  --volumes-from jenkins \
+	  --workdir $(WORKSPACE) \
 	  $(REGISTRY)/$(LIQUIBASE_IMAGE):$(LIQUIBASE_TAG) \
 	  --defaultsFile=$(WORKSPACE)/liquibase.properties \
 	  --url="$(DB_URL)" \
@@ -23,6 +24,7 @@ dry-run:
 migrate:
 	docker run --rm \
 	  --volumes-from jenkins \
+	  --workdir $(WORKSPACE) \
 	  $(REGISTRY)/$(LIQUIBASE_IMAGE):$(LIQUIBASE_TAG) \
 	  --defaultsFile=$(WORKSPACE)/liquibase.properties \
 	  --url="$(DB_URL)" \
