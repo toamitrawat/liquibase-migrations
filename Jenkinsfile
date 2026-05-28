@@ -2,10 +2,15 @@ pipeline {
     agent any
 
     parameters {
-        booleanParam(
-            name: 'DRY_RUN',
-            defaultValue: true,
-            description: 'true = print SQL only (updateSQL); false = apply changes to DB (update)'
+        choice(
+            name: 'ACTION',
+            choices: ['dry-run', 'migrate', 'rollback'],
+            description: 'dry-run: preview SQL only | migrate: apply changes | rollback: revert to a previous tag'
+        )
+        string(
+            name: 'ROLLBACK_TO_TAG',
+            defaultValue: '',
+            description: 'Required when ACTION=rollback. Enter the tag to roll back to (e.g. build-42)'
         )
     }
 
@@ -22,17 +27,56 @@ pipeline {
             }
         }
 
-        stage('Run Migrations') {
+        stage('Dry Run') {
+            when { expression { params.ACTION == 'dry-run' } }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'local-oracle-db-creds',
                     usernameVariable: 'DB_USERNAME',
                     passwordVariable: 'DB_PASSWORD'
                 )]) {
-                    script {
-                        def target = params.DRY_RUN ? 'dry-run' : 'migrate'
-                        sh "make ${target}"
-                    }
+                    sh 'make dry-run'
+                }
+            }
+        }
+
+        stage('Migrate') {
+            when { expression { params.ACTION == 'migrate' } }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'local-oracle-db-creds',
+                    usernameVariable: 'DB_USERNAME',
+                    passwordVariable: 'DB_PASSWORD'
+                )]) {
+                    sh 'make migrate'
+                    sh "RELEASE_TAG=build-${BUILD_NUMBER} make tag"
+                }
+            }
+        }
+
+        stage('Rollback Dry Run') {
+            when { expression { params.ACTION == 'rollback' } }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'local-oracle-db-creds',
+                    usernameVariable: 'DB_USERNAME',
+                    passwordVariable: 'DB_PASSWORD'
+                )]) {
+                    sh "RELEASE_TAG=${params.ROLLBACK_TO_TAG} make rollback-dry-run"
+                }
+            }
+        }
+
+        stage('Rollback') {
+            when { expression { params.ACTION == 'rollback' } }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'local-oracle-db-creds',
+                    usernameVariable: 'DB_USERNAME',
+                    passwordVariable: 'DB_PASSWORD'
+                )]) {
+                    input message: "Review the rollback SQL above. Proceed with rollback to tag '${params.ROLLBACK_TO_TAG}'?"
+                    sh "RELEASE_TAG=${params.ROLLBACK_TO_TAG} make rollback"
                 }
             }
         }
