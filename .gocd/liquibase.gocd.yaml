@@ -35,6 +35,7 @@ pipelines:
         git: https://github.com/toamitrawat/liquibase-migrations.git
         branch: main
         shallow_clone: true
+        auto_update: false
     stages:
       - validate:
           jobs:
@@ -68,6 +69,7 @@ pipelines:
         git: https://github.com/toamitrawat/liquibase-migrations.git
         branch: main
         shallow_clone: true
+        auto_update: false
     stages:
       - validate:
           jobs:
@@ -117,6 +119,7 @@ pipelines:
         git: https://github.com/toamitrawat/liquibase-migrations.git
         branch: main
         shallow_clone: true
+        auto_update: false
     stages:
       - validate:
           jobs:
