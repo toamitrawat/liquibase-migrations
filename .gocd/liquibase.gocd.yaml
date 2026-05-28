@@ -62,7 +62,7 @@ pipelines:
   liquibase-migrate:
     group: liquibase
     label_template: ${git[:8]}
-    lock_behavior: lock_on_failure   # prevent concurrent migrations
+    lock_behavior: lockOnFailure   # prevent concurrent migrations
     materials:
       git:
         git: https://github.com/toamitrawat/liquibase-migrations.git
@@ -109,7 +109,7 @@ pipelines:
   liquibase-rollback:
     group: liquibase
     label_template: ${git[:8]}
-    lock_behavior: lock_on_failure
+    lock_behavior: lockOnFailure
     environment_variables:
       ROLLBACK_TO_TAG: ""         # override at trigger time
     materials:
