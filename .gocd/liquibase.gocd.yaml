@@ -1,0 +1,166 @@
+# GoCD pipeline-as-code — requires the GoCD YAML Config Plugin
+# https://github.com/tomzo/gocd-yaml-config-plugin
+#
+# Setup checklist:
+#   1. Install "YAML Configuration Plugin" from GoCD plugin marketplace
+#   2. Admin → Config Repositories → Add → point to this Git repo, pattern: .gocd/*.gocd.yaml
+#   3. Set environment variables in GoCD UI:
+#        DB_USERNAME  (secure)  — Oracle credential
+#        DB_PASSWORD  (secure)  — Oracle credential
+#        CI_CONTAINER           — name of the GoCD agent Docker container (e.g. gocd-agent)
+#      These can be set at Pipeline or GoCD Environment level.
+#   4. Ensure the GoCD agent container:
+#        - has the Docker socket mounted:  -v /var/run/docker.sock:/var/run/docker.sock
+#        - has docker CLI installed
+#        - is named exactly as CI_CONTAINER above
+#
+# Three separate pipelines mirror the three Jenkins ACTIONs:
+#   liquibase-dry-run   — validate + preview SQL, archives liquibase-dry-run.sql
+#   liquibase-migrate   — validate + show pending + apply + auto-tag build-<label>
+#   liquibase-rollback  — validate + preview rollback SQL + manual gate + execute rollback
+
+format_version: 10
+
+pipelines:
+
+  # ─────────────────────────────────────────────────────────────
+  # DRY RUN — safe to trigger anytime; no DB writes
+  # ─────────────────────────────────────────────────────────────
+  liquibase-dry-run:
+    group: liquibase
+    label_template: ${git[:8]}
+    lock_behavior: none
+    materials:
+      git:
+        git: https://github.com/toamitrawat/liquibase-migrations.git
+        branch: main
+        shallow_clone: true
+    stages:
+      - validate:
+          jobs:
+            validate:
+              tasks:
+                - exec:
+                    command: make
+                    arguments: [validate]
+
+      - dry-run:
+          jobs:
+            dry-run:
+              artifacts:
+                - build:
+                    source: liquibase-dry-run.sql
+                    destination: ""
+              tasks:
+                - exec:
+                    command: make
+                    arguments: [dry-run]
+
+  # ─────────────────────────────────────────────────────────────
+  # MIGRATE — applies pending changesets and stamps a release tag
+  # ─────────────────────────────────────────────────────────────
+  liquibase-migrate:
+    group: liquibase
+    label_template: ${git[:8]}
+    lock_behavior: lock_on_failure   # prevent concurrent migrations
+    materials:
+      git:
+        git: https://github.com/toamitrawat/liquibase-migrations.git
+        branch: main
+        shallow_clone: true
+    stages:
+      - validate:
+          jobs:
+            validate:
+              tasks:
+                - exec:
+                    command: make
+                    arguments: [validate]
+
+      - pending-changes:
+          jobs:
+            status:
+              tasks:
+                - exec:
+                    command: make
+                    arguments: [status]
+
+      - migrate:
+          jobs:
+            migrate:
+              tasks:
+                - exec:
+                    command: make
+                    arguments: [migrate]
+                # Auto-tag with build-<pipeline counter> after successful migration
+                - exec:
+                    command: sh
+                    arguments:
+                      - -c
+                      - RELEASE_TAG=build-${GO_PIPELINE_COUNTER} make tag
+
+  # ─────────────────────────────────────────────────────────────
+  # ROLLBACK — preview SQL, manual approval gate, then execute
+  #
+  # Usage: trigger this pipeline with environment variable
+  #   ROLLBACK_TO_TAG=build-42
+  # Set it as a pipeline-level environment variable override at trigger time.
+  # ─────────────────────────────────────────────────────────────
+  liquibase-rollback:
+    group: liquibase
+    label_template: ${git[:8]}
+    lock_behavior: lock_on_failure
+    environment_variables:
+      ROLLBACK_TO_TAG: ""         # override at trigger time
+    materials:
+      git:
+        git: https://github.com/toamitrawat/liquibase-migrations.git
+        branch: main
+        shallow_clone: true
+    stages:
+      - validate:
+          jobs:
+            validate:
+              tasks:
+                - exec:
+                    command: make
+                    arguments: [validate]
+
+      - validate-parameters:
+          jobs:
+            check-tag:
+              tasks:
+                - exec:
+                    command: sh
+                    arguments:
+                      - -c
+                      - |
+                        if [ -z "${ROLLBACK_TO_TAG}" ]; then
+                          echo "ERROR: ROLLBACK_TO_TAG must be set. Example: build-42"
+                          exit 1
+                        fi
+                        echo "Rolling back to tag: ${ROLLBACK_TO_TAG}"
+
+      - rollback-dry-run:
+          jobs:
+            preview:
+              tasks:
+                - exec:
+                    command: sh
+                    arguments:
+                      - -c
+                      - RELEASE_TAG=${ROLLBACK_TO_TAG} make rollback-dry-run
+
+      # Manual approval gate — equivalent to Jenkins input step
+      - rollback:
+          approval:
+            type: manual
+            allow_only_on_success: true
+          jobs:
+            execute:
+              tasks:
+                - exec:
+                    command: sh
+                    arguments:
+                      - -c
+                      - RELEASE_TAG=${ROLLBACK_TO_TAG} make rollback
