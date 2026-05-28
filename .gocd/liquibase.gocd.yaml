@@ -32,9 +32,9 @@ pipelines:
     lock_behavior: none
     environment_variables:
       CI_CONTAINER: gocd-agent        # change to your agent container name
-      DB_USERNAME: system             # change to your DB username
+      DB_USERNAME: amit
     secure_variables:
-      DB_PASSWORD: "AES:REPLACE_ME"   # GoCD Admin → Encryption → encrypt your DB password
+      DB_PASSWORD: "AES:GVcPThKyI51nLONSeFyotg==:j1mVWa02UYNAJZV74h0R4Q=="   # GoCD Admin → Encryption → encrypt your DB password
     materials:
       git:
         git: https://github.com/toamitrawat/liquibase-migrations.git
@@ -71,9 +71,9 @@ pipelines:
     lock_behavior: lockOnFailure      # prevent concurrent migrations
     environment_variables:
       CI_CONTAINER: gocd-agent        # change to your agent container name
+      DB_USERNAME: amit
     secure_variables:
-      DB_USERNAME: "AES:REPLACE_ME"
-      DB_PASSWORD: "AES:REPLACE_ME"
+      DB_PASSWORD: "AES:GVcPThKyI51nLONSeFyotg==:j1mVWa02UYNAJZV74h0R4Q=="
     materials:
       git:
         git: https://github.com/toamitrawat/liquibase-migrations.git
@@ -124,10 +124,10 @@ pipelines:
     lock_behavior: lockOnFailure
     environment_variables:
       CI_CONTAINER: gocd-agent        # change to your agent container name
+      DB_USERNAME: amit
       ROLLBACK_TO_TAG: ""             # override at trigger time via "Trigger with Options"
     secure_variables:
-      DB_USERNAME: "AES:REPLACE_ME"
-      DB_PASSWORD: "AES:REPLACE_ME"
+      DB_PASSWORD: "AES:GVcPThKyI51nLONSeFyotg==:j1mVWa02UYNAJZV74h0R4Q=="
     materials:
       git:
         git: https://github.com/toamitrawat/liquibase-migrations.git
