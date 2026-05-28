@@ -1,0 +1,9 @@
+--liquibase formatted sql
+
+--changeset developer:001_create_example_table
+CREATE TABLE EXAMPLE_TABLE (
+    ID          NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    NAME        VARCHAR2(100)  NOT NULL,
+    CREATED_AT  TIMESTAMP      DEFAULT SYSTIMESTAMP NOT NULL
+);
+--rollback DROP TABLE EXAMPLE_TABLE;
