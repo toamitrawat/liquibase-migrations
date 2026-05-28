@@ -22,18 +22,6 @@ pipeline {
             }
         }
 
-        stage('Registry Login') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'local-registry-creds',
-                    usernameVariable: 'REG_USER',
-                    passwordVariable: 'REG_PASS'
-                )]) {
-                    sh 'make login'
-                }
-            }
-        }
-
         stage('Run Migrations') {
             steps {
                 withCredentials([usernamePassword(
@@ -52,7 +40,6 @@ pipeline {
 
     post {
         always {
-            sh 'make logout || true'
             cleanWs()
         }
     }
