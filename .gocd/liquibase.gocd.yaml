@@ -4,20 +4,20 @@
 # Setup checklist:
 #   1. Install "YAML Configuration Plugin" from GoCD plugin marketplace
 #   2. Admin → Config Repositories → Add → point to this Git repo, pattern: .gocd/*.gocd.yaml
-#   3. Set environment variables in GoCD UI:
-#        DB_USERNAME  (secure)  — Oracle credential
-#        DB_PASSWORD  (secure)  — Oracle credential
-#        CI_CONTAINER           — name of the GoCD agent Docker container (e.g. gocd-agent)
-#      These can be set at Pipeline or GoCD Environment level.
-#   4. Ensure the GoCD agent container:
-#        - has the Docker socket mounted:  -v /var/run/docker.sock:/var/run/docker.sock
-#        - has docker CLI installed
-#        - is named exactly as CI_CONTAINER above
+#      Rules tab → Allow / refer / Pipeline Group / liquibase
+#   3. Encrypt DB password:
+#        GoCD Admin → Encryption → paste the password → copy the AES:xxx:yyy string
+#        Replace the AES:REPLACE_ME placeholder in secure_variables below
+#        DB_USERNAME is a plain environment_variable (not sensitive)
+#   4. Set CI_CONTAINER to the exact name of your GoCD agent Docker container
+#        (run `docker ps` to confirm the name)
+#   5. Ensure the GoCD agent container has Docker socket mounted:
+#        -v /var/run/docker.sock:/var/run/docker.sock
 #
 # Three separate pipelines mirror the three Jenkins ACTIONs:
 #   liquibase-dry-run   — validate + preview SQL, archives liquibase-dry-run.sql
-#   liquibase-migrate   — validate + show pending + apply + auto-tag build-<label>
-#   liquibase-rollback  — validate + preview rollback SQL + manual gate + execute rollback
+#   liquibase-migrate   — validate + show pending + apply + auto-tag build-<counter>
+#   liquibase-rollback  — validate + params check + preview SQL + manual gate + execute
 
 format_version: 10
 
@@ -30,6 +30,11 @@ pipelines:
     group: liquibase
     label_template: ${git[:8]}
     lock_behavior: none
+    environment_variables:
+      CI_CONTAINER: gocd-agent        # change to your agent container name
+      DB_USERNAME: system             # change to your DB username
+    secure_variables:
+      DB_PASSWORD: "AES:REPLACE_ME"   # GoCD Admin → Encryption → encrypt your DB password
     materials:
       git:
         git: https://github.com/toamitrawat/liquibase-migrations.git
@@ -63,7 +68,12 @@ pipelines:
   liquibase-migrate:
     group: liquibase
     label_template: ${git[:8]}
-    lock_behavior: lockOnFailure   # prevent concurrent migrations
+    lock_behavior: lockOnFailure      # prevent concurrent migrations
+    environment_variables:
+      CI_CONTAINER: gocd-agent        # change to your agent container name
+    secure_variables:
+      DB_USERNAME: "AES:REPLACE_ME"
+      DB_PASSWORD: "AES:REPLACE_ME"
     materials:
       git:
         git: https://github.com/toamitrawat/liquibase-migrations.git
@@ -104,16 +114,20 @@ pipelines:
   # ─────────────────────────────────────────────────────────────
   # ROLLBACK — preview SQL, manual approval gate, then execute
   #
-  # Usage: trigger this pipeline with environment variable
-  #   ROLLBACK_TO_TAG=build-42
-  # Set it as a pipeline-level environment variable override at trigger time.
+  # Usage: trigger this pipeline and set ROLLBACK_TO_TAG to the
+  # target tag (e.g. build-5). You can override environment
+  # variables at trigger time in the GoCD "Trigger with Options" dialog.
   # ─────────────────────────────────────────────────────────────
   liquibase-rollback:
     group: liquibase
     label_template: ${git[:8]}
     lock_behavior: lockOnFailure
     environment_variables:
-      ROLLBACK_TO_TAG: ""         # override at trigger time
+      CI_CONTAINER: gocd-agent        # change to your agent container name
+      ROLLBACK_TO_TAG: ""             # override at trigger time via "Trigger with Options"
+    secure_variables:
+      DB_USERNAME: "AES:REPLACE_ME"
+      DB_PASSWORD: "AES:REPLACE_ME"
     materials:
       git:
         git: https://github.com/toamitrawat/liquibase-migrations.git
@@ -139,7 +153,7 @@ pipelines:
                       - -c
                       - |
                         if [ -z "${ROLLBACK_TO_TAG}" ]; then
-                          echo "ERROR: ROLLBACK_TO_TAG must be set. Example: build-42"
+                          echo "ERROR: ROLLBACK_TO_TAG must be set. Example: build-5"
                           exit 1
                         fi
                         echo "Rolling back to tag: ${ROLLBACK_TO_TAG}"
@@ -154,7 +168,7 @@ pipelines:
                       - -c
                       - RELEASE_TAG=${ROLLBACK_TO_TAG} make rollback-dry-run
 
-      # Manual approval gate — equivalent to Jenkins input step
+      # Manual approval gate — pipeline pauses here until approved in GoCD UI
       - rollback:
           approval:
             type: manual
